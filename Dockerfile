@@ -11,8 +11,12 @@ RUN npm install
 # Copy source
 COPY . .
 
-# Build all packages
-RUN npm run build
+# Build SDK and server (dashboard is built separately with Vite)
+RUN npm run build -w packages/sdk -w packages/server
+
+# Build dashboard with Vite
+FROM base AS dashboard-build
+RUN npm run build -w packages/dashboard
 
 # --- Server image ---
 FROM node:20-alpine AS server
@@ -33,7 +37,7 @@ CMD ["node", "packages/server/dist/index.js"]
 
 # --- Dashboard image ---
 FROM nginx:alpine AS dashboard
-COPY --from=base /app/packages/dashboard/dist /usr/share/nginx/html
+COPY --from=dashboard-build /app/packages/dashboard/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

@@ -41,5 +41,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker images
-        run: docker compose build
+      - name: Build Docker server image
+        run: docker build --target server -t ai-monitor-server .
