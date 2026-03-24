@@ -23,21 +23,41 @@ Production monitoring and observability platform for AI/LLM services. Tracks lat
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  Your App    │     │  Collector API   │     │   Dashboard   │
-│             │     │                  │     │               │
-│  ┌────────┐ │     │  POST /traces    │     │  React 19     │
-│  │ SDK    │─┼────>│  GET  /stats/*   │<────│  Recharts     │
-│  │ wrapper│ │     │  GET  /alerts/*  │     │  Tailwind v4  │
-│  └────────┘ │     │                  │     │               │
-│             │     │  Hono + SQLite   │     │  Dark Theme   │
-└─────────────┘     └──────────────────┘     └───────────────┘
-                           │
-                    ┌──────┴──────┐
-                    │   SQLite    │
-                    │  (WAL mode) │
-                    └─────────────┘
+```mermaid
+flowchart LR
+    subgraph app["Your Application"]
+        direction TB
+        SDK["@ai-monitor/sdk\nDrop-in wrapper"]
+        PII["PII Masking\nEmails · SSNs · Cards"]
+        Batch["Async Batch Transport\nRetry + backoff"]
+        SDK --> PII --> Batch
+    end
+
+    subgraph collector["Collector API"]
+        direction TB
+        Ingest["POST /traces\nBatch ingestion"]
+        Stats["GET /stats/*\nAggregated metrics"]
+        Alerts["Alerts Engine\nThresholds + webhooks"]
+        Ingest --> DB["SQLite WAL\nConcurrent reads"]
+        Stats --> DB
+        Alerts --> DB
+    end
+
+    subgraph dashboard["Dashboard"]
+        direction TB
+        Overview["Overview\nKPI cards + charts"]
+        Traces["Trace Explorer\nSearch + drill-down"]
+        AlertUI["Alert Manager\nRules + event history"]
+    end
+
+    app -->|"traces (batched)"| collector
+    collector -->|"metrics + traces"| dashboard
+
+    style app fill:#1a1a2e,stroke:#6366f1,color:#e2e8f0
+    style collector fill:#1e3a5f,stroke:#0ea5e9,color:#e2e8f0
+    style dashboard fill:#14532d,stroke:#22c55e,color:#e2e8f0
+    style SDK fill:#312e81,stroke:#818cf8,color:#e2e8f0
+    style DB fill:#312e81,stroke:#818cf8,color:#e2e8f0
 ```
 
 ### Monorepo Structure
@@ -200,6 +220,28 @@ readinessProbe:
 | `ALERT_WEBHOOK_URLS` | — | Comma-separated webhook URLs |
 | `VITE_API_URL` | `http://localhost:3100` | Dashboard API base URL |
 | `API_KEY` | — | Optional API authentication |
+
+## Production at Scale
+
+ai-service-monitor is designed as a reference architecture for LLM observability. Here's how each layer maps to enterprise infrastructure:
+
+| Component | Development | Production at Scale |
+|-----------|------------|-------------------|
+| **Collector API** | Single Hono process + SQLite | Horizontally scaled behind ALB, write to TimescaleDB or ClickHouse |
+| **Storage** | SQLite WAL (single node) | TimescaleDB for time-series queries at billion-row scale, or ClickHouse for analytics |
+| **SDK Transport** | Async batched fetch | SDK ships as an npm package; batch size and flush interval tuned per-service |
+| **Alerting** | Webhook POST | Integration with PagerDuty, OpsGenie, Slack via alert webhooks |
+| **Dashboard** | React SPA polling | Grafana dashboards powered by the same collector API, or embedded analytics |
+| **Retention** | Configurable days | Tiered storage: hot (7d in TimescaleDB) → warm (90d compressed) → cold (S3 Parquet) |
+
+### Why This Matters in Financial Services
+
+LLM observability in regulated environments isn't optional — it's a compliance requirement:
+
+- **Cost Governance** — Per-model cost tracking with daily aggregation enables finance teams to allocate AI spend by department, project, or use case. Alert thresholds prevent budget overruns before they happen.
+- **PII Protection** — The SDK masks sensitive data (emails, SSNs, credit card numbers) *before* it leaves the application boundary. No PII in your observability pipeline means no compliance exposure.
+- **Audit Trail** — Every LLM call is recorded with full trace context: model, provider, tokens, latency, cost, and error details. Trace propagation links multi-step agent flows into a single auditable chain.
+- **Model Risk Management** — Error rate tracking, latency degradation alerts, and per-model comparison metrics provide the quantitative evidence that SR 11-7 model risk frameworks require.
 
 ## Testing
 

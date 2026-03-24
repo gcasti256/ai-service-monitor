@@ -15,7 +15,6 @@
   },
   "references": [
     { "path": "packages/sdk" },
-    { "path": "packages/server" },
-    { "path": "packages/dashboard" }
+    { "path": "packages/server" }
   ]
 }
