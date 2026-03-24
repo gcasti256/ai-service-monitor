@@ -19,6 +19,7 @@ export class Transport {
   private queue: TraceEvent[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private flushing = false;
+  private flushPromise: Promise<void> | null = null;
   private shutdownRequested = false;
 
   constructor(
@@ -57,29 +58,49 @@ export class Transport {
   /**
    * Flush all queued events to the collector.
    * Safe to call concurrently — only one flush runs at a time.
+   * If a flush is already in progress, returns the existing flush promise
+   * so callers can await its completion.
    */
   async flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0) {
+    if (this.flushing) {
+      // Wait for the in-flight flush to complete instead of dropping events
+      if (this.flushPromise) {
+        await this.flushPromise;
+      }
+      // After the in-flight flush completes, flush any events that queued up during it
+      if (this.queue.length > 0 && !this.flushing) {
+        return this.flush();
+      }
+      return;
+    }
+
+    if (this.queue.length === 0) {
       return;
     }
 
     this.flushing = true;
 
-    try {
-      // Drain the queue into a local batch
-      const batch = this.queue.splice(0, this.queue.length);
+    this.flushPromise = (async () => {
+      try {
+        // Drain the queue into a local batch
+        const batch = this.queue.splice(0, this.queue.length);
 
-      await this.sendBatch(batch);
-    } catch {
-      // Events are dropped on persistent failure — this is intentional.
-      // We never want telemetry to interfere with the host application.
-    } finally {
-      this.flushing = false;
-    }
+        await this.sendBatch(batch);
+      } catch {
+        // Events are dropped on persistent failure — this is intentional.
+        // We never want telemetry to interfere with the host application.
+      } finally {
+        this.flushing = false;
+        this.flushPromise = null;
+      }
+    })();
+
+    await this.flushPromise;
   }
 
   /**
    * Gracefully shut down: flush remaining events and clear timers.
+   * Waits for any in-flight flush to complete before performing a final flush.
    */
   async shutdown(): Promise<void> {
     this.shutdownRequested = true;
@@ -89,7 +110,12 @@ export class Transport {
       this.flushTimer = null;
     }
 
-    // Final flush
+    // Wait for any in-flight flush to finish
+    if (this.flushPromise) {
+      await this.flushPromise;
+    }
+
+    // Final flush of any remaining events
     await this.flush();
   }
 

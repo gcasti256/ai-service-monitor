@@ -29,25 +29,37 @@ export function AlertPanel() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.createAlertRule({
-      ...formData,
-      threshold: Number(formData.threshold),
-      windowMinutes: Number(formData.windowMinutes),
-      webhookUrl: formData.webhookUrl || undefined,
-    });
-    setShowForm(false);
-    setFormData({ name: '', metric: 'latency', operator: 'gt', threshold: 0, windowMinutes: 5, webhookUrl: '' });
-    void loadData();
+    try {
+      await api.createAlertRule({
+        ...formData,
+        threshold: Number(formData.threshold),
+        windowMinutes: Number(formData.windowMinutes),
+        webhookUrl: formData.webhookUrl || undefined,
+      });
+      setShowForm(false);
+      setFormData({ name: '', metric: 'latency', operator: 'gt', threshold: 0, windowMinutes: 5, webhookUrl: '' });
+      void loadData();
+    } catch {
+      // Best-effort — form stays open so user can retry
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await api.deleteAlertRule(id);
-    void loadData();
+    try {
+      await api.deleteAlertRule(id);
+      void loadData();
+    } catch {
+      // Best-effort — stale UI is acceptable on failure
+    }
   };
 
   const handleToggle = async (id: string, enabled: boolean) => {
-    await api.updateAlertRule(id, { enabled: !enabled });
-    void loadData();
+    try {
+      await api.updateAlertRule(id, { enabled: !enabled });
+      void loadData();
+    } catch {
+      // Best-effort — stale UI is acceptable on failure
+    }
   };
 
   return (

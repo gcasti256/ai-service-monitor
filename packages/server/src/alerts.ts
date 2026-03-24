@@ -230,7 +230,7 @@ function isWebhookUrlSafe(url: string): boolean {
     return false;
   }
 
-  // Block private IP ranges (10.x, 172.16-31.x, 192.168.x)
+  // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x)
   const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipMatch) {
     const [, a, b] = ipMatch.map(Number);
@@ -239,6 +239,18 @@ function isWebhookUrlSafe(url: string): boolean {
     if (a === 192 && b === 168) return false;            // 192.168.0.0/16
     if (a === 169 && b === 254) return false;            // 169.254.0.0/16 (link-local)
     if (a === 0) return false;                           // 0.0.0.0/8
+  }
+
+  // Block IPv6 private/reserved ranges
+  // URL parser strips brackets, so we check the raw hostname
+  const ipv6 = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (
+    ipv6.startsWith('fc') || ipv6.startsWith('fd') ||  // Unique local (fc00::/7)
+    ipv6.startsWith('fe80') ||                          // Link-local (fe80::/10)
+    ipv6 === '::' ||                                    // Unspecified
+    ipv6.startsWith('::ffff:')                          // IPv4-mapped IPv6
+  ) {
+    return false;
   }
 
   return true;

@@ -75,7 +75,13 @@ export function ErrorLog({ errors, total }: ErrorLogProps) {
                     <div>
                       <span className="text-text-muted">Request:</span>
                       <pre className="mt-1 p-2 bg-bg-primary rounded text-xs text-text-secondary overflow-x-auto">
-                        {JSON.stringify(JSON.parse(err.request_body), null, 2)}
+                        {(() => {
+                          try {
+                            return JSON.stringify(JSON.parse(err.request_body), null, 2);
+                          } catch {
+                            return err.request_body;
+                          }
+                        })()}
                       </pre>
                     </div>
                   )}

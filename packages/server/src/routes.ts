@@ -31,36 +31,38 @@ const app = new Hono();
 // Middleware
 app.use('*', cors());
 
+// Global error handler — ensures consistent error responses
+app.onError((err, c) => {
+  console.error('Unhandled route error:', err.message);
+  return c.json({ error: 'Internal server error' }, 500);
+});
+
 // Optional API key authentication for write endpoints.
 // If API_KEY is set in the environment, require it in the Authorization header.
 const API_KEY = process.env.API_KEY;
 
+function requireAuth(authHeader: string | undefined): boolean {
+  if (!API_KEY) return true;
+  return authHeader === `Bearer ${API_KEY}`;
+}
+
 app.use('/traces', async (c, next) => {
-  if (c.req.method === 'POST' && API_KEY) {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
+  if (c.req.method === 'POST' && !requireAuth(c.req.header('Authorization'))) {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
   await next();
 });
 
-app.use('/alerts/rules', async (c, next) => {
-  if ((c.req.method === 'POST' || c.req.method === 'PUT' || c.req.method === 'DELETE') && API_KEY) {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
+app.use('/alerts/*', async (c, next) => {
+  if (c.req.method !== 'GET' && !requireAuth(c.req.header('Authorization'))) {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
   await next();
 });
 
 app.use('/admin/*', async (c, next) => {
-  if (API_KEY) {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
+  if (!requireAuth(c.req.header('Authorization'))) {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
   await next();
 });
@@ -78,12 +80,12 @@ const traceSchema = z.object({
   spanId: z.string(),
   parentSpanId: z.string().optional(),
   timestamp: z.string(),
-  duration: z.number(),
+  duration: z.number().nonnegative(),
   provider: z.string(),
   model: z.string(),
   endpoint: z.string(),
   status: z.enum(['success', 'error']),
-  statusCode: z.number().optional(),
+  statusCode: z.number().int().optional(),
   error: z
     .object({
       message: z.string(),
@@ -92,14 +94,14 @@ const traceSchema = z.object({
     })
     .optional(),
   tokens: z.object({
-    input: z.number(),
-    output: z.number(),
-    total: z.number(),
+    input: z.number().int().nonnegative(),
+    output: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
   }),
   cost: z.object({
-    input: z.number(),
-    output: z.number(),
-    total: z.number(),
+    input: z.number().nonnegative(),
+    output: z.number().nonnegative(),
+    total: z.number().nonnegative(),
   }),
   metadata: z.record(z.unknown()).optional(),
   request: z.record(z.unknown()).optional(),
@@ -136,93 +138,129 @@ app.post('/traces', async (c) => {
 
 // GET /traces
 app.get('/traces', (c) => {
-  const filters = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-    model: c.req.query('model'),
-    provider: c.req.query('provider'),
-    status: c.req.query('status'),
-    traceId: c.req.query('traceId'),
-    limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
-    offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
-  };
+  try {
+    const filters = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+      model: c.req.query('model'),
+      provider: c.req.query('provider'),
+      status: c.req.query('status'),
+      traceId: c.req.query('traceId'),
+      limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+      offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
+    };
 
-  return c.json(getTraces(filters));
+    return c.json(getTraces(filters));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // GET /traces/:id
 app.get('/traces/:id', (c) => {
-  const trace = getTraceById(c.req.param('id'));
-  if (!trace) return c.json({ error: 'Trace not found' }, 404);
-  return c.json(trace);
+  try {
+    const trace = getTraceById(c.req.param('id'));
+    if (!trace) return c.json({ error: 'Trace not found' }, 404);
+    return c.json(trace);
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // GET /traces/by-trace/:traceId
 app.get('/traces/by-trace/:traceId', (c) => {
-  const traces = getTracesByTraceId(c.req.param('traceId'));
-  return c.json(traces);
+  try {
+    const traces = getTracesByTraceId(c.req.param('traceId'));
+    return c.json(traces);
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // --- Stats Routes ---
 
 app.get('/stats', (c) => {
-  const params = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-    model: c.req.query('model'),
-    provider: c.req.query('provider'),
-  };
-  return c.json(getDashboardStats(params));
+  try {
+    const params = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+      model: c.req.query('model'),
+      provider: c.req.query('provider'),
+    };
+    return c.json(getDashboardStats(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.get('/stats/latency', (c) => {
-  const params = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-  };
-  return c.json(getLatencyTimeseries(params));
+  try {
+    const params = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+    };
+    return c.json(getLatencyTimeseries(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.get('/stats/models', (c) => {
-  const params = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-  };
-  return c.json(getModelBreakdown(params));
+  try {
+    const params = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+    };
+    return c.json(getModelBreakdown(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.get('/stats/cost', (c) => {
-  const params = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-  };
-  return c.json(getCostTimeseries(params));
+  try {
+    const params = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+    };
+    return c.json(getCostTimeseries(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.get('/stats/errors', (c) => {
-  const params = {
-    startDate: c.req.query('startDate'),
-    endDate: c.req.query('endDate'),
-    limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
-    offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
-  };
-  return c.json(getErrorLog(params));
+  try {
+    const params = {
+      startDate: c.req.query('startDate'),
+      endDate: c.req.query('endDate'),
+      limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+      offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
+    };
+    return c.json(getErrorLog(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // --- Alert Routes ---
 
 const alertRuleSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(200),
   metric: z.enum(['latency', 'error_rate', 'cost', 'token_usage']),
   operator: z.enum(['gt', 'lt', 'gte', 'lte']),
   threshold: z.number(),
-  windowMinutes: z.number().min(1).optional(),
-  webhookUrl: z.string().url().optional(),
+  windowMinutes: z.number().int().min(1).max(10080).optional(),
+  webhookUrl: z.string().url().max(2048).optional(),
   enabled: z.boolean().optional(),
 });
 
 app.get('/alerts/rules', (c) => {
-  return c.json(getAlertRules());
+  try {
+    return c.json(getAlertRules());
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.post('/alerts/rules', async (c) => {
@@ -261,36 +299,56 @@ app.put('/alerts/rules/:id', async (c) => {
 });
 
 app.delete('/alerts/rules/:id', (c) => {
-  deleteAlertRule(c.req.param('id'));
-  return c.json({ deleted: true });
+  try {
+    deleteAlertRule(c.req.param('id'));
+    return c.json({ deleted: true });
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.post('/alerts/evaluate', (c) => {
-  const triggered = evaluateAlerts();
-  return c.json({ triggered, count: triggered.length });
+  try {
+    const triggered = evaluateAlerts();
+    return c.json({ triggered, count: triggered.length });
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.get('/alerts/events', (c) => {
-  const params = {
-    ruleId: c.req.query('ruleId'),
-    limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
-    offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
-  };
-  return c.json(getAlertEvents(params));
+  try {
+    const params = {
+      ruleId: c.req.query('ruleId'),
+      limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+      offset: c.req.query('offset') ? parseInt(c.req.query('offset')!) : undefined,
+    };
+    return c.json(getAlertEvents(params));
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 // --- Admin Routes ---
 
 app.get('/admin/stats', (c) => {
-  return c.json(getDbStats());
+  try {
+    return c.json(getDbStats());
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 app.post('/admin/cleanup', async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const retentionDays = (body as { retentionDays?: number }).retentionDays;
-  const tracesDeleted = cleanupOldTraces(retentionDays);
-  const alertsDeleted = cleanupOldAlertEvents(retentionDays);
-  return c.json({ tracesDeleted, alertsDeleted });
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const retentionDays = (body as { retentionDays?: number }).retentionDays;
+    const tracesDeleted = cleanupOldTraces(retentionDays);
+    const alertsDeleted = cleanupOldAlertEvents(retentionDays);
+    return c.json({ tracesDeleted, alertsDeleted });
+  } catch {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
 });
 
 export { app };
