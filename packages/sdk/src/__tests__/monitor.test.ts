@@ -3,7 +3,7 @@ import { AIMonitor } from '../monitor.js';
 import type { MonitorConfig, TraceEvent } from '../types.js';
 
 // Capture events sent to the transport by intercepting fetch
-let capturedRequests: Array<{ url: string; body: { events: TraceEvent[] } }> = [];
+let capturedRequests: Array<{ url: string; body: TraceEvent[] }> = [];
 
 beforeEach(() => {
   capturedRequests = [];
@@ -54,7 +54,7 @@ describe('AIMonitor', () => {
       await monitor.shutdown();
 
       expect(capturedRequests.length).toBeGreaterThan(0);
-      const events = capturedRequests[0].body.events;
+      const events = capturedRequests[0].body;
       expect(events.length).toBe(1);
 
       const event = events[0];
@@ -79,7 +79,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.tokens.input).toBe(150);
       expect(event.tokens.output).toBe(75);
       expect(event.tokens.total).toBe(225);
@@ -96,7 +96,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.tokens.input).toBe(200);
       expect(event.tokens.output).toBe(100);
       expect(event.tokens.total).toBe(300);
@@ -112,7 +112,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.response?.content).toBe('Test response');
       expect(event.response?.finishReason).toBe('stop');
     });
@@ -128,7 +128,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.response?.content).toBe('Claude response');
       expect(event.response?.finishReason).toBe('end_turn');
     });
@@ -143,7 +143,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       // gpt-4o: $2.50/1M input, $10.00/1M output
       expect(event.cost.input).toBeCloseTo(0.0025, 6);
       expect(event.cost.output).toBeCloseTo(0.005, 6);
@@ -162,7 +162,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.status).toBe('error');
       expect(event.error?.message).toBe('API rate limited');
       expect(event.error?.type).toBe('Error');
@@ -183,7 +183,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.response?.content).toBe('Contact [REDACTED_EMAIL] for details');
       expect(event.response?.content).not.toContain('user@example.com');
     });
@@ -203,7 +203,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.response?.content).toBe('Contact user@example.com for details');
     });
 
@@ -220,7 +220,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.metadata).toEqual({ env: 'test', requestId: 'abc123' });
     });
 
@@ -242,7 +242,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.tokens.input).toBe(42);
       expect(event.tokens.output).toBe(17);
       expect(event.tokens.total).toBe(59);
@@ -260,7 +260,7 @@ describe('AIMonitor', () => {
       await monitor.shutdown();
 
       const totalEvents = capturedRequests.reduce(
-        (sum, r) => sum + r.body.events.length,
+        (sum, r) => sum + r.body.length,
         0,
       );
       expect(totalEvents).toBe(5);
@@ -276,7 +276,7 @@ describe('AIMonitor', () => {
       await monitor.shutdown();
 
       const totalEvents = capturedRequests.reduce(
-        (sum, r) => sum + r.body.events.length,
+        (sum, r) => sum + r.body.length,
         0,
       );
       expect(totalEvents).toBe(0);
@@ -302,7 +302,7 @@ describe('AIMonitor', () => {
         await monitor.shutdown();
 
         const totalEvents = capturedRequests.reduce(
-          (sum, r) => sum + r.body.events.length,
+          (sum, r) => sum + r.body.length,
           0,
         );
         // With our mock, exactly 5 out of 10 should be sampled
@@ -323,7 +323,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.provider).toBe('openai');
       expect(event.endpoint).toBe('chat.completions');
     });
@@ -337,7 +337,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.provider).toBe('anthropic');
       expect(event.endpoint).toBe('messages.create');
     });
@@ -366,7 +366,7 @@ describe('AIMonitor', () => {
       await monitor.trace('openai', 'gpt-4o', 'test', async () => ({}));
       await monitor.shutdown();
 
-      expect(capturedRequests[0].url).toBe('https://telemetry.example.com/v1/traces');
+      expect(capturedRequests[0].url).toBe('https://telemetry.example.com/traces');
     });
 
     it('strips trailing slashes from collector URL', async () => {
@@ -375,7 +375,7 @@ describe('AIMonitor', () => {
       await monitor.trace('openai', 'gpt-4o', 'test', async () => ({}));
       await monitor.shutdown();
 
-      expect(capturedRequests[0].url).toBe('https://telemetry.example.com/v1/traces');
+      expect(capturedRequests[0].url).toBe('https://telemetry.example.com/traces');
     });
   });
 
@@ -397,7 +397,7 @@ describe('AIMonitor', () => {
 
       await monitor.shutdown();
 
-      const event = capturedRequests[0].body.events[0];
+      const event = capturedRequests[0].body[0];
       expect(event.provider).toBe('custom');
       expect(event.model).toBe('my-model');
       expect(event.tokens.total).toBe(150);

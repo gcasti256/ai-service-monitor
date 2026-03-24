@@ -195,12 +195,66 @@ function evaluateCondition(value: number, operator: string, threshold: number): 
   }
 }
 
+/**
+ * Validate that a webhook URL is safe to call (not targeting internal services).
+ * Blocks localhost, private IP ranges, link-local, and cloud metadata endpoints.
+ */
+function isWebhookUrlSafe(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // Only allow http(s)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost variants
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1' ||
+    hostname === '0.0.0.0'
+  ) {
+    return false;
+  }
+
+  // Block cloud metadata endpoints
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') {
+    return false;
+  }
+
+  // Block private IP ranges (10.x, 172.16-31.x, 192.168.x)
+  const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number);
+    if (a === 10) return false;                         // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return false;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return false;            // 192.168.0.0/16
+    if (a === 169 && b === 254) return false;            // 169.254.0.0/16 (link-local)
+    if (a === 0) return false;                           // 0.0.0.0/8
+  }
+
+  return true;
+}
+
 async function fireWebhook(url: string, payload: unknown): Promise<void> {
+  if (!isWebhookUrlSafe(url)) {
+    return; // Silently reject unsafe URLs
+  }
+
   try {
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000), // 10s timeout
     });
   } catch {
     // Best-effort -- don't crash on webhook failure
@@ -227,4 +281,5 @@ export function getAlertEvents(
     .all(...queryParams, limit, offset);
 }
 
+export { isWebhookUrlSafe };
 export type { AlertRuleInput };

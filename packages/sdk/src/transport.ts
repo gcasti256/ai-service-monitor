@@ -109,10 +109,10 @@ export class Transport {
           headers['Authorization'] = `Bearer ${this.apiKey}`;
         }
 
-        const response = await fetch(`${this.collectorUrl}/v1/traces`, {
+        const response = await fetch(`${this.collectorUrl}/traces`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ events: batch }),
+          body: JSON.stringify(batch),
         });
 
         if (response.ok) {

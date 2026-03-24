@@ -54,7 +54,7 @@ export function TraceList() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.traces || []).map((trace: any) => (
+                {(data?.traces || []).map((trace) => (
                   <tr
                     key={trace.id}
                     onClick={() => setSelectedTraceId(trace.trace_id)}

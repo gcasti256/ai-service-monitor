@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as api from '../api';
+import type { TraceRow } from '../api';
 
 interface TraceDetailProps {
   traceId: string;
@@ -7,14 +8,24 @@ interface TraceDetailProps {
 }
 
 export function TraceDetail({ traceId, onClose }: TraceDetailProps) {
-  const [spans, setSpans] = useState<any[]>([]);
+  const [spans, setSpans] = useState<TraceRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getTraceGroup(traceId).then((data) => {
-      setSpans(data);
-      setLoading(false);
-    });
+    let cancelled = false;
+    api.getTraceGroup(traceId)
+      .then((data) => {
+        if (!cancelled) {
+          setSpans(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
   }, [traceId]);
 
   if (loading) return <div className="text-text-muted p-8 text-center">Loading trace...</div>;

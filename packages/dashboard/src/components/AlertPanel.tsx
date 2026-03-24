@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from '../api';
+import type { AlertRule, AlertEvent } from '../api';
 
 export function AlertPanel() {
-  const [rules, setRules] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
+  const [rules, setRules] = useState<AlertRule[]>([]);
+  const [events, setEvents] = useState<AlertEvent[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -15,12 +16,16 @@ export function AlertPanel() {
   });
 
   const loadData = useCallback(async () => {
-    const [r, e] = await Promise.all([api.getAlertRules(), api.getAlertEvents()]);
-    setRules(r);
-    setEvents(e);
+    try {
+      const [r, e] = await Promise.all([api.getAlertRules(), api.getAlertEvents()]);
+      setRules(r);
+      setEvents(e);
+    } catch {
+      // Best-effort — dashboard keeps showing stale data on fetch failure
+    }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,17 +37,17 @@ export function AlertPanel() {
     });
     setShowForm(false);
     setFormData({ name: '', metric: 'latency', operator: 'gt', threshold: 0, windowMinutes: 5, webhookUrl: '' });
-    loadData();
+    void loadData();
   };
 
   const handleDelete = async (id: string) => {
     await api.deleteAlertRule(id);
-    loadData();
+    void loadData();
   };
 
   const handleToggle = async (id: string, enabled: boolean) => {
     await api.updateAlertRule(id, { enabled: !enabled });
-    loadData();
+    void loadData();
   };
 
   return (
@@ -84,7 +89,7 @@ export function AlertPanel() {
         <div className="space-y-2">
           {rules.length === 0 ? (
             <div className="text-text-muted text-sm py-4 text-center">No alert rules configured</div>
-          ) : rules.map((rule: any) => (
+          ) : rules.map((rule) => (
             <div key={rule.id} className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
               <div>
                 <span className="text-text-primary text-sm">{rule.name}</span>
@@ -108,7 +113,7 @@ export function AlertPanel() {
         <div className="space-y-2">
           {events.length === 0 ? (
             <div className="text-text-muted text-sm py-4 text-center">No alerts triggered</div>
-          ) : events.map((event: any) => (
+          ) : events.map((event) => (
             <div key={event.id} className="flex items-center justify-between p-3 border border-border/50 rounded-lg">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-warning" />

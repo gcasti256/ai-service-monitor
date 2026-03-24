@@ -22,6 +22,7 @@ import {
   deleteAlertRule,
   evaluateAlerts,
   getAlertEvents,
+  isWebhookUrlSafe,
 } from './alerts.js';
 import { cleanupOldTraces, cleanupOldAlertEvents, getDbStats } from './retention.js';
 
@@ -29,6 +30,40 @@ const app = new Hono();
 
 // Middleware
 app.use('*', cors());
+
+// Optional API key authentication for write endpoints.
+// If API_KEY is set in the environment, require it in the Authorization header.
+const API_KEY = process.env.API_KEY;
+
+app.use('/traces', async (c, next) => {
+  if (c.req.method === 'POST' && API_KEY) {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+  await next();
+});
+
+app.use('/alerts/rules', async (c, next) => {
+  if ((c.req.method === 'POST' || c.req.method === 'PUT' || c.req.method === 'DELETE') && API_KEY) {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+  await next();
+});
+
+app.use('/admin/*', async (c, next) => {
+  if (API_KEY) {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+  await next();
+});
 
 // Health check
 app.get('/health', (c) => {
@@ -194,6 +229,9 @@ app.post('/alerts/rules', async (c) => {
   try {
     const body = await c.req.json();
     const parsed = alertRuleSchema.parse(body);
+    if (parsed.webhookUrl && !isWebhookUrlSafe(parsed.webhookUrl)) {
+      return c.json({ error: 'Webhook URL is not allowed (private/internal addresses are blocked)' }, 400);
+    }
     const rule = createAlertRule(parsed);
     return c.json(rule, 201);
   } catch (err) {
@@ -208,6 +246,9 @@ app.put('/alerts/rules/:id', async (c) => {
   try {
     const body = await c.req.json();
     const parsed = alertRuleSchema.partial().parse(body);
+    if (parsed.webhookUrl && !isWebhookUrlSafe(parsed.webhookUrl)) {
+      return c.json({ error: 'Webhook URL is not allowed (private/internal addresses are blocked)' }, 400);
+    }
     const rule = updateAlertRule(c.req.param('id'), parsed);
     if (!rule) return c.json({ error: 'Rule not found' }, 404);
     return c.json(rule);
