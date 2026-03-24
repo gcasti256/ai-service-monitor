@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIMonitor } from '../monitor.js';
-import type { TraceEvent } from '../types.js';
+import type { MonitorConfig, TraceEvent } from '../types.js';
 
 // Capture events sent to the transport by intercepting fetch
 let capturedRequests: Array<{ url: string; body: { events: TraceEvent[] } }> = [];
@@ -16,7 +16,7 @@ beforeEach(() => {
   }) as unknown as typeof fetch;
 });
 
-function createMonitor(overrides: Partial<Parameters<typeof AIMonitor.prototype['trace']>[0]> & Record<string, unknown> = {}) {
+function createMonitor(overrides: Partial<MonitorConfig> = {}) {
   return new AIMonitor({
     collectorUrl: 'http://localhost:3000',
     batchSize: 1, // Flush every event for testing

@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint 'packages/*/src/**/*.{ts,tsx}'",
-    "typecheck": "tsc --build",
+    "typecheck": "tsc --noEmit -p packages/sdk/tsconfig.json && tsc --noEmit -p packages/server/tsconfig.json",
     "clean": "rm -rf packages/*/dist packages/*/node_modules/.vite"
   },
   "devDependencies": {

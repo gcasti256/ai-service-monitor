@@ -10,11 +10,6 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "composite": true
-  },
-  "references": [
-    { "path": "packages/sdk" },
-    { "path": "packages/server" }
-  ]
+    "sourceMap": true
+  }
 }
