@@ -1,0 +1,28 @@
+services:
+  server:
+    build:
+      context: .
+      target: server
+    ports:
+      - "3100:3100"
+    environment:
+      - PORT=3100
+      - HOST=0.0.0.0
+      - RETENTION_DAYS=30
+    volumes:
+      - monitor-data:/app/data
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  monitor-data:

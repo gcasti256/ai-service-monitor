@@ -1,0 +1,35 @@
+{
+  "name": "ai-service-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monitoring and observability platform for AI/LLM services in production",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:dashboard\"",
+    "dev:server": "npm run dev -w packages/server",
+    "dev:dashboard": "npm run dev -w packages/dashboard",
+    "build": "npm run build -w packages/sdk && npm run build -w packages/server && npm run build -w packages/dashboard",
+    "build:sdk": "npm run build -w packages/sdk",
+    "build:server": "npm run build -w packages/server",
+    "build:dashboard": "npm run build -w packages/dashboard",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint 'packages/*/src/**/*.{ts,tsx}'",
+    "typecheck": "tsc --build",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules/.vite"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}
