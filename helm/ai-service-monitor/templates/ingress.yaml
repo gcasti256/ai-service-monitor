@@ -1,0 +1,67 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ai-service-monitor.fullname" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ai-service-monitor.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-dashboard
+                port:
+                  name: http
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-server
+                port:
+                  name: http
+          - path: /traces
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-server
+                port:
+                  name: http
+          - path: /stats
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-server
+                port:
+                  name: http
+          - path: /alerts
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-server
+                port:
+                  name: http
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ai-service-monitor.fullname" . }}-server
+                port:
+                  name: http
+{{- end }}

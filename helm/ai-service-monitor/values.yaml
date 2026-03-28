@@ -1,0 +1,166 @@
+# AI Service Monitor — Default Helm Values
+# Override per-environment with values-staging.yaml or values-production.yaml
+
+# -- Global settings
+global:
+  # -- Namespace to deploy into (created if namespace.create is true)
+  namespace: ai-monitor
+
+# -- Namespace configuration
+namespace:
+  # -- Whether to create the namespace
+  create: true
+
+# -- Container image settings
+image:
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image pull secrets (e.g. for private registries)
+  pullSecrets: []
+
+# =============================================================================
+# Server (Collector API + Alert Engine)
+# =============================================================================
+server:
+  # -- Number of replicas (overridden by HPA when enabled)
+  replicaCount: 2
+
+  image:
+    # -- Server container image repository
+    repository: gcasti256/ai-service-monitor-server
+    # -- Server container image tag (defaults to Chart appVersion)
+    tag: ""
+
+  # -- Server port
+  port: 3100
+
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # -- Liveness probe configuration
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # -- Readiness probe configuration
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # -- Horizontal Pod Autoscaler
+  autoscaling:
+    # -- Enable HPA for server
+    enabled: true
+    # -- Minimum replicas
+    minReplicas: 2
+    # -- Maximum replicas
+    maxReplicas: 10
+    # -- Target CPU utilization percentage
+    targetCPUUtilization: 70
+    # -- Scale-down stabilization window (seconds)
+    scaleDownStabilization: 300
+
+  # -- Non-secret environment variables
+  config:
+    PORT: "3100"
+    HOST: "0.0.0.0"
+    RETENTION_DAYS: "30"
+    NODE_ENV: "production"
+
+  # -- Secret environment variables (base64-encoded in the rendered Secret)
+  # In production, use an external secret manager (e.g. Sealed Secrets, Vault)
+  secrets:
+    API_KEY: ""
+    DATABASE_URL: ""
+    ALERT_WEBHOOK_URLS: ""
+
+  # -- Node selector for scheduling
+  nodeSelector: {}
+
+  # -- Tolerations for scheduling
+  tolerations: []
+
+  # -- Additional pod annotations (e.g. Prometheus scrape config)
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3100"
+    prometheus.io/path: "/health"
+
+# =============================================================================
+# Dashboard (React SPA served by nginx)
+# =============================================================================
+dashboard:
+  # -- Number of replicas
+  replicaCount: 2
+
+  image:
+    # -- Dashboard container image repository
+    repository: gcasti256/ai-service-monitor-dashboard
+    # -- Dashboard container image tag (defaults to Chart appVersion)
+    tag: ""
+
+  # -- Dashboard port
+  port: 80
+
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # -- Node selector for scheduling
+  nodeSelector: {}
+
+  # -- Tolerations for scheduling
+  tolerations: []
+
+# =============================================================================
+# Ingress
+# =============================================================================
+ingress:
+  # -- Enable ingress resource
+  enabled: true
+
+  # -- Ingress class name
+  className: nginx
+
+  # -- Hostname for the ingress
+  host: monitor.example.com
+
+  # -- TLS configuration
+  tls:
+    # -- Enable TLS
+    enabled: true
+    # -- Secret name for TLS certificate
+    secretName: dashboard-tls
+
+  # -- Additional annotations
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    cert-manager.io/cluster-issuer: letsencrypt-prod

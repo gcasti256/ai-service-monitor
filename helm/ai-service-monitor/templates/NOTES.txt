@@ -1,0 +1,29 @@
+AI Service Monitor has been deployed!
+
+{{- if .Values.ingress.enabled }}
+
+Dashboard URL: https://{{ .Values.ingress.host }}
+API URL:       https://{{ .Values.ingress.host }}/health
+
+{{- else }}
+
+To access the dashboard, run:
+
+  kubectl -n {{ .Values.global.namespace }} port-forward svc/{{ include "ai-service-monitor.fullname" . }}-dashboard 8080:{{ .Values.dashboard.port }}
+
+Then open http://localhost:8080
+
+To access the API server, run:
+
+  kubectl -n {{ .Values.global.namespace }} port-forward svc/{{ include "ai-service-monitor.fullname" . }}-server 3100:{{ .Values.server.port }}
+
+Then test with:
+
+  curl http://localhost:3100/health
+
+{{- end }}
+
+To check deployment status:
+
+  kubectl -n {{ .Values.global.namespace }} get pods
+  kubectl -n {{ .Values.global.namespace }} get hpa

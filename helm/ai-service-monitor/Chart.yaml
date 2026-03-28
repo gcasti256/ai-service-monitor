@@ -1,0 +1,19 @@
+apiVersion: v2
+name: ai-service-monitor
+description: Production monitoring and observability platform for AI/LLM services
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - monitoring
+  - observability
+  - llm
+  - openai
+  - anthropic
+maintainers:
+  - name: George Castillo
+    url: https://github.com/gcasti256
+home: https://github.com/gcasti256/ai-service-monitor
+sources:
+  - https://github.com/gcasti256/ai-service-monitor

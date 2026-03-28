@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+  namespace: ai-monitor
+  labels:
+    app.kubernetes.io/name: server
+    app.kubernetes.io/part-of: ai-service-monitor
+data:
+  PORT: "3100"
+  HOST: "0.0.0.0"
+  RETENTION_DAYS: "30"
+  NODE_ENV: "production"

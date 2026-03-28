@@ -380,25 +380,73 @@ docker compose up -d
 # API: http://localhost:3100
 ```
 
-### Kubernetes
+## Kubernetes Deployment
 
-The Docker images include health checks compatible with Kubernetes probes:
+Full Kubernetes manifests and a Helm chart are included for production deployment.
+
+### Quick Deploy with kubectl
+
+```bash
+# Create namespace and apply all manifests
+kubectl apply -f k8s/namespace.yaml
+# Edit k8s/server/secret.yaml with real credentials first!
+kubectl apply -f k8s/server/
+kubectl apply -f k8s/dashboard/
+```
+
+### Deploy with Helm
+
+```bash
+# Default
+helm install ai-monitor ./helm/ai-service-monitor
+
+# Staging
+helm install ai-monitor ./helm/ai-service-monitor \
+  -f ./helm/ai-service-monitor/values-staging.yaml
+
+# Production
+helm install ai-monitor ./helm/ai-service-monitor \
+  -f ./helm/ai-service-monitor/values-production.yaml
+
+# Upgrade an existing release
+helm upgrade ai-monitor ./helm/ai-service-monitor \
+  -f ./helm/ai-service-monitor/values-production.yaml
+```
+
+### What's Included
+
+| Feature | Details |
+|---------|---------|
+| **HPA** | CPU-based autoscaling (2-10 replicas, 70% target) with scale-down stabilization |
+| **Health Probes** | Liveness + readiness probes on `/health` with tuned delays |
+| **Security** | `runAsNonRoot`, `readOnlyRootFilesystem`, all capabilities dropped |
+| **Anti-affinity** | Pods prefer spreading across nodes for high availability |
+| **Rolling Updates** | Zero-downtime deploys (`maxSurge: 1`, `maxUnavailable: 0`) |
+| **Ingress** | TLS via cert-manager, nginx rate limiting, CORS headers |
+| **Prometheus** | Pod annotations for automatic scrape discovery |
+
+### Environment-Specific Deployments
+
+| Environment | Replicas | CPU Limit | Memory Limit | HPA Max |
+|-------------|----------|-----------|--------------|---------|
+| Staging | 1 | 300m | 256Mi | 3 |
+| Default | 2 | 500m | 512Mi | 10 |
+| Production | 3 | 1000m | 1Gi | 20 |
+
+### Monitoring in Kubernetes
+
+Server pods are annotated for Prometheus autodiscovery:
 
 ```yaml
-livenessProbe:
-  httpGet:
-    path: /health
-    port: 3100
-  initialDelaySeconds: 5
-  periodSeconds: 30
-
-readinessProbe:
-  httpGet:
-    path: /health
-    port: 3100
-  initialDelaySeconds: 3
-  periodSeconds: 10
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3100"
+  prometheus.io/path: "/health"
 ```
+
+To set up a Prometheus ServiceMonitor, point it at the `server` service on port `3100`.
+
+See [`k8s/README.md`](k8s/README.md) for raw manifest details and [`helm/ai-service-monitor/README.md`](helm/ai-service-monitor/README.md) for Helm chart configuration.
 
 ## Configuration
 

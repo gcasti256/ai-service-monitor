@@ -1,0 +1,38 @@
+# Staging environment overrides
+
+server:
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilization: 80
+
+  config:
+    RETENTION_DAYS: "7"
+    NODE_ENV: "staging"
+
+dashboard:
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+ingress:
+  host: monitor-staging.example.com
+  tls:
+    secretName: dashboard-staging-tls
