@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dashboard
+  namespace: ai-monitor
+  labels:
+    app.kubernetes.io/name: dashboard
+    app.kubernetes.io/part-of: ai-service-monitor
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dashboard

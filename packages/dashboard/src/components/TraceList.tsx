@@ -38,6 +38,8 @@ export function TraceList() {
 
       {loading && !data ? (
         <div className="text-text-muted text-sm py-8 text-center">Loading traces...</div>
+      ) : (data?.traces?.length ?? 0) === 0 ? (
+        <div className="text-text-muted text-sm py-8 text-center">No traces found</div>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -54,10 +56,13 @@ export function TraceList() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.traces || []).map((trace) => (
+                {data!.traces.map((trace) => (
                   <tr
                     key={trace.id}
                     onClick={() => setSelectedTraceId(trace.trace_id)}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={e => e.key === 'Enter' && setSelectedTraceId(trace.trace_id)}
                     className="border-b border-border/30 hover:bg-bg-hover cursor-pointer transition-colors"
                   >
                     <td className="py-2 px-2">

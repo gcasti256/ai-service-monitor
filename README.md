@@ -419,11 +419,11 @@ helm upgrade ai-monitor ./helm/ai-service-monitor \
 |---------|---------|
 | **HPA** | CPU-based autoscaling (2-10 replicas, 70% target) with scale-down stabilization |
 | **Health Probes** | Liveness + readiness probes on `/health` with tuned delays |
-| **Security** | `runAsNonRoot`, `readOnlyRootFilesystem`, all capabilities dropped |
+| **Security** | `runAsNonRoot`, `readOnlyRootFilesystem`, all capabilities dropped, NetworkPolicy |
 | **Anti-affinity** | Pods prefer spreading across nodes for high availability |
 | **Rolling Updates** | Zero-downtime deploys (`maxSurge: 1`, `maxUnavailable: 0`) |
 | **Ingress** | TLS via cert-manager, nginx rate limiting, CORS headers |
-| **Prometheus** | Pod annotations for automatic scrape discovery |
+| **PDB** | PodDisruptionBudget prevents simultaneous eviction during maintenance |
 
 ### Environment-Specific Deployments
 
@@ -433,18 +433,9 @@ helm upgrade ai-monitor ./helm/ai-service-monitor \
 | Default | 2 | 500m | 512Mi | 10 |
 | Production | 3 | 1000m | 1Gi | 20 |
 
-### Monitoring in Kubernetes
+### Note on Database Backends
 
-Server pods are annotated for Prometheus autodiscovery:
-
-```yaml
-annotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "3100"
-  prometheus.io/path: "/health"
-```
-
-To set up a Prometheus ServiceMonitor, point it at the `server` service on port `3100`.
+The default configuration uses SQLite, which is ideal for single-instance deployments and development. For multi-replica K8s deployments using the HPA, set `DATABASE_URL` to a PostgreSQL connection string so all pods share the same data store.
 
 See [`k8s/README.md`](k8s/README.md) for raw manifest details and [`helm/ai-service-monitor/README.md`](helm/ai-service-monitor/README.md) for Helm chart configuration.
 
@@ -457,29 +448,8 @@ See [`k8s/README.md`](k8s/README.md) for raw manifest details and [`helm/ai-serv
 | `DATABASE_PATH` | `./data/monitor.db` | SQLite database path |
 | `RETENTION_DAYS` | `30` | Auto-cleanup threshold |
 | `API_KEY` | — | Optional Bearer token authentication for write endpoints |
+| `CORS_ORIGIN` | `*` | Allowed CORS origin (set to your domain in production) |
 | `VITE_API_URL` | `http://localhost:3100` | Dashboard API base URL |
-
-## Production at Scale
-
-ai-service-monitor is designed as a reference architecture for LLM observability. Here's how each layer maps to enterprise infrastructure:
-
-| Component | Development | Production at Scale |
-|-----------|------------|-------------------|
-| **Collector API** | Single Hono process + SQLite | Horizontally scaled behind ALB, write to TimescaleDB or ClickHouse |
-| **Storage** | SQLite WAL (single node) | TimescaleDB for time-series queries at billion-row scale, or ClickHouse for analytics |
-| **SDK Transport** | Async batched fetch | SDK ships as an npm package; batch size and flush interval tuned per-service |
-| **Alerting** | Webhook POST | Integration with PagerDuty, OpsGenie, Slack via alert webhooks |
-| **Dashboard** | React SPA polling | Grafana dashboards powered by the same collector API, or embedded analytics |
-| **Retention** | Configurable days | Tiered storage: hot (7d in TimescaleDB) → warm (90d compressed) → cold (S3 Parquet) |
-
-### Why This Matters in Financial Services
-
-LLM observability in regulated environments isn't optional — it's a compliance requirement:
-
-- **Cost Governance** — Per-model cost tracking with daily aggregation enables finance teams to allocate AI spend by department, project, or use case. Alert thresholds prevent budget overruns before they happen.
-- **PII Protection** — The SDK masks sensitive data (emails, SSNs, credit card numbers) *before* it leaves the application boundary. No PII in your observability pipeline means no compliance exposure.
-- **Audit Trail** — Every LLM call is recorded with full trace context: model, provider, tokens, latency, cost, and error details. Trace propagation links multi-step agent flows into a single auditable chain.
-- **Model Risk Management** — Error rate tracking, latency degradation alerts, and per-model comparison metrics provide the quantitative evidence that SR 11-7 model risk frameworks require.
 
 ## Testing
 

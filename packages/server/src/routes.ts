@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
+import crypto from 'crypto';
 import {
   insertTrace,
   insertTraceBatch,
@@ -28,22 +29,24 @@ import { cleanupOldTraces, cleanupOldAlertEvents, getDbStats } from './retention
 
 const app = new Hono();
 
-// Middleware
-app.use('*', cors());
+app.use('*', cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+}));
 
-// Global error handler — ensures consistent error responses
 app.onError((err, c) => {
   console.error('Unhandled route error:', err.message);
   return c.json({ error: 'Internal server error' }, 500);
 });
 
-// Optional API key authentication for write endpoints.
-// If API_KEY is set in the environment, require it in the Authorization header.
 const API_KEY = process.env.API_KEY;
 
 function requireAuth(authHeader: string | undefined): boolean {
   if (!API_KEY) return true;
-  return authHeader === `Bearer ${API_KEY}`;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (token.length !== API_KEY.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(API_KEY));
 }
 
 app.use('/traces', async (c, next) => {
@@ -114,7 +117,6 @@ const traceSchema = z.object({
     .optional(),
 });
 
-// POST /traces - single or batch
 app.post('/traces', async (c) => {
   try {
     const body = await c.req.json();
@@ -136,7 +138,6 @@ app.post('/traces', async (c) => {
   }
 });
 
-// GET /traces
 app.get('/traces', (c) => {
   try {
     const filters = {
@@ -156,7 +157,6 @@ app.get('/traces', (c) => {
   }
 });
 
-// GET /traces/:id
 app.get('/traces/:id', (c) => {
   try {
     const trace = getTraceById(c.req.param('id'));
@@ -167,7 +167,6 @@ app.get('/traces/:id', (c) => {
   }
 });
 
-// GET /traces/by-trace/:traceId
 app.get('/traces/by-trace/:traceId', (c) => {
   try {
     const traces = getTracesByTraceId(c.req.param('traceId'));
@@ -300,7 +299,8 @@ app.put('/alerts/rules/:id', async (c) => {
 
 app.delete('/alerts/rules/:id', (c) => {
   try {
-    deleteAlertRule(c.req.param('id'));
+    const result = deleteAlertRule(c.req.param('id'));
+    if (result.changes === 0) return c.json({ error: 'Rule not found' }, 404);
     return c.json({ deleted: true });
   } catch {
     return c.json({ error: 'Internal server error' }, 500);
@@ -339,14 +339,22 @@ app.get('/admin/stats', (c) => {
   }
 });
 
+const cleanupSchema = z.object({
+  retentionDays: z.number().int().min(1).max(365).optional(),
+}).optional();
+
 app.post('/admin/cleanup', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const retentionDays = (body as { retentionDays?: number }).retentionDays;
+    const parsed = cleanupSchema.parse(body);
+    const retentionDays = parsed?.retentionDays;
     const tracesDeleted = cleanupOldTraces(retentionDays);
     const alertsDeleted = cleanupOldAlertEvents(retentionDays);
     return c.json({ tracesDeleted, alertsDeleted });
-  } catch {
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return c.json({ error: 'Validation failed', details: err.errors }, 400);
+    }
     return c.json({ error: 'Internal server error' }, 500);
   }
 });

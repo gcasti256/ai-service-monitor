@@ -1,24 +1,17 @@
 import { useState } from 'react';
-
-interface ErrorEntry {
-  id: string;
-  trace_id: string;
-  timestamp: string;
-  model: string;
-  provider: string;
-  endpoint: string;
-  duration: number;
-  error_message: string;
-  error_type: string;
-  tokens_input: number;
-  tokens_output: number;
-  cost_total: number;
-  request_body: string | null;
-}
+import type { ErrorEntry } from '../api';
 
 interface ErrorLogProps {
   errors: ErrorEntry[];
   total: number;
+}
+
+function formatRequestBody(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
 }
 
 export function ErrorLog({ errors, total }: ErrorLogProps) {
@@ -38,6 +31,7 @@ export function ErrorLog({ errors, total }: ErrorLogProps) {
             <div key={err.id} className="border border-border/50 rounded-lg overflow-hidden">
               <button
                 onClick={() => setExpanded(expanded === err.id ? null : err.id)}
+                aria-expanded={expanded === err.id}
                 className="w-full flex items-center justify-between p-3 hover:bg-bg-hover transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
@@ -75,13 +69,7 @@ export function ErrorLog({ errors, total }: ErrorLogProps) {
                     <div>
                       <span className="text-text-muted">Request:</span>
                       <pre className="mt-1 p-2 bg-bg-primary rounded text-xs text-text-secondary overflow-x-auto">
-                        {(() => {
-                          try {
-                            return JSON.stringify(JSON.parse(err.request_body), null, 2);
-                          } catch {
-                            return err.request_body;
-                          }
-                        })()}
+                        {formatRequestBody(err.request_body)}
                       </pre>
                     </div>
                   )}

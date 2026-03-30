@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import * as api from '../api';
 import type { AlertRule, AlertEvent } from '../api';
 
 export function AlertPanel() {
-  const [rules, setRules] = useState<AlertRule[]>([]);
-  const [events, setEvents] = useState<AlertEvent[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     metric: 'latency',
@@ -15,20 +15,18 @@ export function AlertPanel() {
     webhookUrl: '',
   });
 
-  const loadData = useCallback(async () => {
-    try {
-      const [r, e] = await Promise.all([api.getAlertRules(), api.getAlertEvents()]);
-      setRules(r);
-      setEvents(e);
-    } catch {
-      // Best-effort — dashboard keeps showing stale data on fetch failure
-    }
+  const rulesFetcher = useCallback(async () => {
+    const [r, e] = await Promise.all([api.getAlertRules(), api.getAlertEvents()]);
+    return { rules: r, events: e };
   }, []);
 
-  useEffect(() => { void loadData(); }, [loadData]);
+  const { data, refresh } = usePolling(rulesFetcher, 15000);
+  const rules: AlertRule[] = data?.rules ?? [];
+  const events: AlertEvent[] = data?.events ?? [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       await api.createAlertRule({
         ...formData,
@@ -38,32 +36,41 @@ export function AlertPanel() {
       });
       setShowForm(false);
       setFormData({ name: '', metric: 'latency', operator: 'gt', threshold: 0, windowMinutes: 5, webhookUrl: '' });
-      void loadData();
+      void refresh();
     } catch {
-      // Best-effort — form stays open so user can retry
+      setError('Failed to create alert rule. Please try again.');
     }
   };
 
   const handleDelete = async (id: string) => {
+    setError(null);
     try {
       await api.deleteAlertRule(id);
-      void loadData();
+      void refresh();
     } catch {
-      // Best-effort — stale UI is acceptable on failure
+      setError('Failed to delete rule.');
     }
   };
 
   const handleToggle = async (id: string, enabled: boolean) => {
+    setError(null);
     try {
       await api.updateAlertRule(id, { enabled: !enabled });
-      void loadData();
+      void refresh();
     } catch {
-      // Best-effort — stale UI is acceptable on failure
+      setError('Failed to update rule.');
     }
   };
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-error hover:text-error/80 ml-2">&times;</button>
+        </div>
+      )}
+
       <div className="bg-bg-surface border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-text-primary font-medium">Alert Rules</h3>
@@ -75,7 +82,7 @@ export function AlertPanel() {
         {showForm && (
           <form onSubmit={handleSubmit} className="mb-4 p-4 bg-bg-elevated rounded-lg space-y-3">
             <input type="text" placeholder="Rule name" value={formData.name} onChange={e => setFormData(d => ({ ...d, name: e.target.value }))} required className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-text-primary text-sm" />
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <select value={formData.metric} onChange={e => setFormData(d => ({ ...d, metric: e.target.value }))} className="px-3 py-2 bg-bg-primary border border-border rounded-lg text-text-primary text-sm">
                 <option value="latency">Latency (ms)</option>
                 <option value="error_rate">Error Rate (%)</option>
@@ -90,7 +97,7 @@ export function AlertPanel() {
               </select>
               <input type="number" step="any" placeholder="Threshold" value={formData.threshold} onChange={e => setFormData(d => ({ ...d, threshold: parseFloat(e.target.value) }))} className="px-3 py-2 bg-bg-primary border border-border rounded-lg text-text-primary text-sm" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input type="number" placeholder="Window (minutes)" value={formData.windowMinutes} onChange={e => setFormData(d => ({ ...d, windowMinutes: parseInt(e.target.value) }))} className="px-3 py-2 bg-bg-primary border border-border rounded-lg text-text-primary text-sm" />
               <input type="url" placeholder="Webhook URL (optional)" value={formData.webhookUrl} onChange={e => setFormData(d => ({ ...d, webhookUrl: e.target.value }))} className="px-3 py-2 bg-bg-primary border border-border rounded-lg text-text-primary text-sm" />
             </div>

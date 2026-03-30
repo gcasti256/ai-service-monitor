@@ -1,11 +1,3 @@
-/**
- * AIMonitor — the primary entry point for the monitoring SDK.
- *
- * Wraps AI service calls with non-intrusive telemetry capture.
- * The monitored function's return value is always passed through
- * unmodified; telemetry is sent asynchronously in the background.
- */
-
 import type { MonitorConfig, TraceEvent } from './types.js';
 import { Transport } from './transport.js';
 import { estimateCost } from './cost.js';
@@ -17,27 +9,22 @@ import {
   extractAnthropicResponse,
 } from './extractors.js';
 
-/** Filled-in config with all defaults applied. */
 interface ResolvedConfig {
   collectorUrl: string;
   apiKey?: string;
   batchSize: number;
   flushInterval: number;
   enablePiiMasking: boolean;
+  includeStackTraces: boolean;
   sampleRate: number;
   metadata: Record<string, unknown>;
 }
 
 export interface TraceOptions<T> {
-  /** Override or provide a trace ID to correlate multiple spans. */
   traceId?: string;
-  /** Link this span to a parent span. */
   parentSpanId?: string;
-  /** Extra metadata attached to this trace event. */
   metadata?: Record<string, unknown>;
-  /** Custom token extraction for non-standard response shapes. */
   extractTokens?: (result: T) => { input: number; output: number };
-  /** Custom response extraction for non-standard response shapes. */
   extractResponse?: (result: T) => { content?: string; finishReason?: string };
 }
 
@@ -46,12 +33,19 @@ export class AIMonitor {
   private transport: Transport;
 
   constructor(config: MonitorConfig) {
+    const batchSize = config.batchSize ?? 10;
+    const flushInterval = config.flushInterval ?? 5000;
+
+    if (batchSize < 1) throw new Error('batchSize must be >= 1');
+    if (flushInterval < 100) throw new Error('flushInterval must be >= 100ms');
+
     this.config = {
       collectorUrl: config.collectorUrl.replace(/\/+$/, ''),
       apiKey: config.apiKey,
-      batchSize: config.batchSize ?? 10,
-      flushInterval: config.flushInterval ?? 5000,
+      batchSize,
+      flushInterval,
       enablePiiMasking: config.enablePiiMasking ?? true,
+      includeStackTraces: config.includeStackTraces ?? false,
       sampleRate: Math.min(1, Math.max(0, config.sampleRate ?? 1)),
       metadata: config.metadata ?? {},
     };
@@ -65,9 +59,9 @@ export class AIMonitor {
   }
 
   /**
-   * Wrap an async AI call with monitoring. The wrapped function is
-   * executed normally and its result returned unmodified. Telemetry
-   * is captured and sent in the background.
+   * Wrap an async AI call with monitoring. The wrapped function executes
+   * normally and its result is returned unmodified. Telemetry is sent
+   * asynchronously in the background.
    */
   async trace<T>(
     provider: TraceEvent['provider'],
@@ -76,7 +70,6 @@ export class AIMonitor {
     fn: () => Promise<T>,
     options?: TraceOptions<T>,
   ): Promise<T> {
-    // Respect sample rate — skip tracing for sampled-out calls
     if (!this.shouldSample()) {
       return fn();
     }
@@ -97,30 +90,31 @@ export class AIMonitor {
       error = {
         message: err instanceof Error ? err.message : String(err),
         type: err instanceof Error ? err.constructor.name : 'UnknownError',
-        stack: err instanceof Error ? err.stack : undefined,
+        stack: this.config.includeStackTraces && err instanceof Error ? err.stack : undefined,
       };
-      throw err; // Always re-throw — we never swallow caller errors
+      throw err;
     } finally {
       const duration = Math.round((performance.now() - startTime) * 100) / 100;
 
-      // Extract tokens — use custom extractor or auto-detect by provider
       const tokens = this.extractTokens(
         provider,
         status === 'success' ? result! : undefined,
         options,
       );
 
-      // Calculate cost
       const cost = estimateCost(model, tokens.input, tokens.output);
 
-      // Extract response content
       const response = this.extractResponseContent(
         provider,
         status === 'success' ? result! : undefined,
         options,
       );
 
-      // Build the trace event
+      const mergedMetadata = {
+        ...this.config.metadata,
+        ...options?.metadata,
+      };
+
       const event: TraceEvent = {
         id: crypto.randomUUID(),
         traceId,
@@ -139,10 +133,7 @@ export class AIMonitor {
           total: tokens.input + tokens.output,
         },
         cost,
-        metadata: {
-          ...this.config.metadata,
-          ...options?.metadata,
-        },
+        metadata: this.config.enablePiiMasking ? maskObject(mergedMetadata) : mergedMetadata,
         response: response
           ? {
               content: this.config.enablePiiMasking && response.content
@@ -154,7 +145,6 @@ export class AIMonitor {
           : undefined,
       };
 
-      // Send asynchronously — never blocks the caller
       try {
         this.transport.send(event);
       } catch {
@@ -165,9 +155,6 @@ export class AIMonitor {
     return result!;
   }
 
-  /**
-   * Convenience wrapper for OpenAI SDK calls.
-   */
   async traceOpenAI<T>(
     model: string,
     fn: () => Promise<T>,
@@ -176,9 +163,6 @@ export class AIMonitor {
     return this.trace('openai', model, 'chat.completions', fn, options);
   }
 
-  /**
-   * Convenience wrapper for Anthropic SDK calls.
-   */
   async traceAnthropic<T>(
     model: string,
     fn: () => Promise<T>,
@@ -200,7 +184,6 @@ export class AIMonitor {
       timestamp: new Date().toISOString(),
     };
 
-    // Apply PII masking
     if (this.config.enablePiiMasking) {
       if (fullEvent.response?.content) {
         fullEvent.response.content = maskPii(fullEvent.response.content);
@@ -220,14 +203,9 @@ export class AIMonitor {
     }
   }
 
-  /**
-   * Gracefully shut down the monitor. Flushes all pending events.
-   */
   async shutdown(): Promise<void> {
     await this.transport.shutdown();
   }
-
-  // --- Private helpers ---
 
   private shouldSample(): boolean {
     return Math.random() < this.config.sampleRate;
@@ -242,7 +220,6 @@ export class AIMonitor {
       return { input: 0, output: 0 };
     }
 
-    // Custom extractor takes priority
     if (options?.extractTokens) {
       try {
         return options.extractTokens(result);
@@ -251,7 +228,6 @@ export class AIMonitor {
       }
     }
 
-    // Auto-detect by provider
     if (provider === 'openai') {
       return extractOpenAITokens(result) ?? { input: 0, output: 0 };
     }
@@ -272,7 +248,6 @@ export class AIMonitor {
       return null;
     }
 
-    // Custom extractor takes priority
     if (options?.extractResponse) {
       try {
         return options.extractResponse(result);
@@ -281,7 +256,6 @@ export class AIMonitor {
       }
     }
 
-    // Auto-detect by provider
     if (provider === 'openai') {
       return extractOpenAIResponse(result);
     }

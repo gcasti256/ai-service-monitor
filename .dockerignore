@@ -1,0 +1,16 @@
+node_modules
+.git
+.github
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+data/
+coverage/
+.DS_Store
+*.log
+*.tsbuildinfo
+k8s/
+helm/
+examples/

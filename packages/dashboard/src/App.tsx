@@ -11,6 +11,12 @@ import { AlertPanel } from './components/AlertPanel';
 
 type Tab = 'overview' | 'traces' | 'alerts';
 
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toString();
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -20,21 +26,14 @@ function App() {
   const modelFetcher = useCallback(() => api.getModelBreakdown(), []);
   const errorFetcher = useCallback(() => api.getErrorLog(), []);
 
-  const { data: stats } = usePolling(statsFetcher, 10000);
+  const { data: stats, error: statsError } = usePolling(statsFetcher, 10000);
   const { data: latencyData } = usePolling(latencyFetcher, 30000);
   const { data: costData } = usePolling(costFetcher, 30000);
   const { data: modelData } = usePolling(modelFetcher, 30000);
   const { data: errorData } = usePolling(errorFetcher, 15000);
 
-  const formatNumber = (n: number) => {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-    return n.toString();
-  };
-
   return (
     <div className="min-h-screen bg-bg-primary">
-      {/* Header */}
       <header className="border-b border-border bg-bg-surface/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -45,10 +44,12 @@ function App() {
             </div>
             <h1 className="text-lg font-semibold text-text-primary">AI Service Monitor</h1>
           </div>
-          <div className="flex items-center gap-1 bg-bg-elevated rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-bg-elevated rounded-lg p-1" role="tablist">
             {(['overview', 'traces', 'alerts'] as Tab[]).map((tab) => (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-1.5 rounded-md text-sm transition-colors capitalize ${
                   activeTab === tab
@@ -63,11 +64,15 @@ function App() {
         </div>
       </header>
 
-      {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {statsError && activeTab === 'overview' && (
+          <div className="p-3 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
+            Unable to reach the API server. Data may be stale.
+          </div>
+        )}
+
         {activeTab === 'overview' && (
-          <>
-            {/* Metric Cards */}
+          <div role="tabpanel" className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <MetricCard
                 title="Total Calls"
@@ -91,22 +96,18 @@ function App() {
               />
             </div>
 
-            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <LatencyChart data={latencyData || []} />
               <CostChart data={costData || []} />
             </div>
 
-            {/* Model Breakdown */}
             <ModelTable data={modelData || []} />
-
-            {/* Error Log */}
             <ErrorLog errors={errorData?.errors || []} total={errorData?.total || 0} />
-          </>
+          </div>
         )}
 
-        {activeTab === 'traces' && <TraceList />}
-        {activeTab === 'alerts' && <AlertPanel />}
+        {activeTab === 'traces' && <div role="tabpanel"><TraceList /></div>}
+        {activeTab === 'alerts' && <div role="tabpanel"><AlertPanel /></div>}
       </main>
     </div>
   );

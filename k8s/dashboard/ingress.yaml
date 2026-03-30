@@ -12,7 +12,7 @@ metadata:
     nginx.ingress.kubernetes.io/limit-rps: "50"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://monitor.example.com"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
     cert-manager.io/cluster-issuer: letsencrypt-prod
@@ -55,13 +55,6 @@ spec:
                 port:
                   name: http
           - path: /alerts
-            pathType: Prefix
-            backend:
-              service:
-                name: server
-                port:
-                  name: http
-          - path: /admin
             pathType: Prefix
             backend:
               service:

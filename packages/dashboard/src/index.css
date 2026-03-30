@@ -15,11 +15,18 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
+
+  /* Chart-specific tokens (used by Recharts inline styles) */
+  --color-chart-grid: #2a2a32;
+  --color-chart-axis: #71717a;
+  --color-chart-tooltip-bg: #1a1a1e;
+  --color-chart-tooltip-border: #2a2a32;
+  --color-chart-tooltip-text: #e4e4e7;
 }
 
 body {
-  background-color: #0a0a0b;
-  color: #e4e4e7;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -27,9 +34,9 @@ body {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #111113;
+  background: var(--color-bg-surface);
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a32;
+  background: var(--color-border);
   border-radius: 3px;
 }

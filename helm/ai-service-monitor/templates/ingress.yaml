@@ -57,11 +57,4 @@ spec:
                 name: {{ include "ai-service-monitor.fullname" . }}-server
                 port:
                   name: http
-          - path: /admin
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "ai-service-monitor.fullname" . }}-server
-                port:
-                  name: http
 {{- end }}

@@ -21,10 +21,7 @@ spec:
       labels:
         app.kubernetes.io/name: server
         app.kubernetes.io/part-of: ai-service-monitor
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "3100"
-        prometheus.io/path: "/health"
+      annotations: {}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -44,7 +41,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: server
-          image: gcasti256/ai-service-monitor-server:latest
+          image: gcasti256/ai-service-monitor-server:1.0.0
           ports:
             - name: http
               containerPort: 3100

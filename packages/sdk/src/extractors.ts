@@ -1,19 +1,3 @@
-/**
- * Token and response extractors for common AI SDK response shapes.
- *
- * These handle the raw response objects from OpenAI and Anthropic SDKs,
- * extracting token usage and content without requiring the caller to
- * know the response structure.
- */
-
-/**
- * Extract token usage from an OpenAI chat completion response.
- *
- * Expected shape:
- * ```json
- * { "usage": { "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150 } }
- * ```
- */
 export function extractOpenAITokens(
   result: unknown,
 ): { input: number; output: number } | null {
@@ -31,14 +15,6 @@ export function extractOpenAITokens(
   return { input: promptTokens, output: completionTokens };
 }
 
-/**
- * Extract token usage from an Anthropic message response.
- *
- * Expected shape:
- * ```json
- * { "usage": { "input_tokens": 100, "output_tokens": 50 } }
- * ```
- */
 export function extractAnthropicTokens(
   result: unknown,
 ): { input: number; output: number } | null {
@@ -56,19 +32,6 @@ export function extractAnthropicTokens(
   return { input: inputTokens, output: outputTokens };
 }
 
-/**
- * Extract response content from an OpenAI chat completion.
- *
- * Expected shape:
- * ```json
- * {
- *   "choices": [{
- *     "message": { "content": "Hello!" },
- *     "finish_reason": "stop"
- *   }]
- * }
- * ```
- */
 export function extractOpenAIResponse(
   result: unknown,
 ): { content?: string; finishReason?: string } | null {
@@ -96,17 +59,6 @@ export function extractOpenAIResponse(
   return { content, finishReason };
 }
 
-/**
- * Extract response content from an Anthropic message response.
- *
- * Expected shape:
- * ```json
- * {
- *   "content": [{ "type": "text", "text": "Hello!" }],
- *   "stop_reason": "end_turn"
- * }
- * ```
- */
 export function extractAnthropicResponse(
   result: unknown,
 ): { content?: string; finishReason?: string } | null {
@@ -130,7 +82,6 @@ export function extractAnthropicResponse(
   return { content, finishReason: stopReason };
 }
 
-/** Type guard for plain objects. */
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
